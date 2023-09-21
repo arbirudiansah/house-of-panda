@@ -1,0 +1,102 @@
+# Github workflow for CI
+# This code is part of House of Panda project.
+
+name: deploy-prod
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "src/**"
+      - "public/**"
+      - "utils/**"
+      - "markdown/**"
+      - "package.json"
+      - "yarn.lock"
+      - "next.config.js"
+      - ".github/**"
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: /home/www/hop
+      MONGODB_URI: ${{ secrets.MONGODB_URI_PROD }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET_PROD }}
+      ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+      NEXT_PUBLIC_SMARTCONTRACT_ADDRESS: "0xb224d609ec38e01d7caaf731b2465f33b8105229"
+      NEXT_PUBLIC_STAKER_ADDRESS: "0x00346845fb86aEC9d627109FF70cF4a27A6525fe"
+      NEXT_PUBLIC_IPFS_HOST: "https://ipfs.houseofpanda.co"
+      NEXT_PUBLIC_STABLE_COIN_ADDRESS: "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      NEXT_PUBLIC_WEB3_PROVIDER: "https://mainnet.infura.io/v3/eaf9acc880f140298d5e26f22a53fa64"
+      NEXT_PUBLIC_EXPLORER_URL: "https://etherscan.io/"
+      NEXT_PUBLIC_NFT_URL: "https://opensea.io/assets/ethereum/0xb224d609ec38e01d7caaf731b2465f33b8105229"
+      NEXT_PUBLIC_WEB_URL: "https://www.houseofpanda.co"
+      NEXT_PUBLIC_WS_URL: wss://www.houseofpanda.co
+      NEXT_PUBLIC_CHAIN_ID: 1
+      REDIS_HOST: localhost
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      REDIS_PORT: 6379
+      REDIS_DB: 2
+      NODE_ENV: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          NODE_ENV=development yarn install
+
+      - name: Build the Next.js app
+        run: |
+          NODE_ENV=production RUN_MODE=build yarn build
+
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: unnecessary
+
+      - name: Adding Known Hosts
+        run: ssh-keyscan -p ${{ secrets.SSH_PORT}} -H ${{ secrets.SSH_HOST }}  >> ~/.ssh/known_hosts
+
+      - name: Copy files to Deployment Server
+        run: |
+          rsync -avzrhcP --delete-after -e "ssh -p ${{ secrets.SSH_PORT }}" \
+            ./.next \
+            ./public \
+            ./node_modules \
+            ./dist \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:${{ env.APP_DIR }}
+
+      - name: Copy files to remote server
+        run: |
+          scp -r \
+            ./utils \
+            ./markdown \
+            ./package.json \
+            ./yarn.lock \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:${{ env.APP_DIR }}
+
+  notify_twist:
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    steps:
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - name: Git checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: "0"
+      - name: Get commit message
+        id: get_commit_message
+        run: |
+          chmod +x ./.github/gitlog.sh
+          ./.github/gitlog.sh
+          cat /tmp/twist_data.json
+      - name: Install curl
+        run: sudo apt-get install -y curl
+      - name: Notify Twist
+        run: |
+          curl -vv -X POST -H "Content-type: application/json" -d @/tmp/twist_data.json 'https://twist.com/api/v3/integration_incoming/post_data?install_id=406724&install_token=${{ secrets.TWIST_INSTALL_TOKEN }}'

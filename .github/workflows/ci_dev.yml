@@ -1,0 +1,116 @@
+# Github workflow for CI
+# This code is part of House of Panda project.
+
+name: deploy-staging
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'utils/**'
+      - 'markdown/**'
+      - 'package.json'
+      - 'yarn.lock'
+      - 'next.config.js'
+jobs:
+  build-and-deploy:
+    name: Deploy Staging
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: /home/www/hop_dev/
+      MONGODB_URI: ${{ secrets.MONGODB_URI }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      ADMIN_KEY: cAKVj8jErNUi+2ENXVj0rNnN3hnPAv//jRJrmzL8dmI1VSI9FAurCgfKqk0pCkTnOEaIPzSRfqyZc8DTkLvtFoKFss+c0zJfvoG7/c4HSbsL9FvZCtl1M7k1v9wsbQBhLfhCcB0lbQW/x3aAVT0ZIhs07WS8KQJbJb0ejB4vtfw=
+      NEXT_PUBLIC_SMARTCONTRACT_ADDRESS: "0x184d7387290ECcA389d9DCB5Cde41B8201b4F877"
+      NEXT_PUBLIC_STAKER_ADDRESS: "0xD3608dC19BA8D7BAcBA167893fD5e9b0993C1830"
+      NEXT_PUBLIC_IPFS_HOST: https://ipfs.houseofpanda.co
+      NEXT_PUBLIC_STABLE_COIN_ADDRESS: "0x30bbAD31Cdd1e0f51d17feC52b023035C544aC91"
+      NEXT_PUBLIC_WEB3_PROVIDER: https://goerli.infura.io/v3/d1fccd12300f4b7981d0b8ca66000df8
+      NEXT_PUBLIC_EXPLORER_URL: https://goerli.etherscan.io/
+      NEXT_PUBLIC_NFT_URL: https://testnets.opensea.io/assets/goerli
+      NEXT_PUBLIC_WEB_URL: https://dev.houseofpanda.co
+      NEXT_PUBLIC_WS_URL: ws://localhost:3001
+      NEXT_PUBLIC_CHAIN_ID: 5
+      PASSWORD: 12345
+      REDIS_HOST: localhost
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      REDIS_PORT: 6379
+      REDIS_DB: 1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          NODE_ENV=development yarn install
+
+      - name: Build the Next.js app
+        run: |
+          NODE_ENV=production RUN_MODE=build yarn build
+
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: unnecessary
+
+      - name: Adding Known Hosts
+        run: ssh-keyscan -p ${{ secrets.SSH_PORT}} -H ${{ secrets.SSH_HOST }}  >> ~/.ssh/known_hosts
+
+      - name: Copy files to Deployment Server
+        run: |
+          rsync -avzrhcP --delete-after -e "ssh -p ${{ secrets.SSH_PORT }}" \
+            ./.next \
+            ./public \
+            ./node_modules \
+            ./dist \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:${{ env.APP_DIR }}
+
+      - name: Copy files to remote server
+        run: |
+          scp -r \
+            ./etc/script/dev-ecosystem.config.js \
+            ./etc/script/start_service.sh \
+            ./utils \
+            ./markdown \
+            ./package.json \
+            ./yarn.lock \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:${{ env.APP_DIR }}
+
+      - name: Restart the HoP app
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            echo ${{ env.PASSWORD }} | ${{ env.APP_DIR }}/start_service.sh staging
+            history -c && history -w
+            unset HISTFILE
+
+  notify_twist:
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    steps:
+    - name: Dump GitHub context
+      env:
+        GITHUB_CONTEXT: ${{ toJson(github) }}
+      run: echo "$GITHUB_CONTEXT"
+    - name: Git checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: '0'
+    - name: Get commit message
+      id: get_commit_message
+      run: |
+        chmod +x ./.github/gitlog_dev.sh
+        ./.github/gitlog_dev.sh
+        cat /tmp/twist_data.json
+    - name: Install curl
+      run: sudo apt-get install -y curl
+    - name: Notify Twist
+      run: |
+        curl -vv -X POST -H "Content-type: application/json" -d @/tmp/twist_data.json 'https://twist.com/api/v3/integration_incoming/post_data?install_id=406724&install_token=${{ secrets.TWIST_INSTALL_TOKEN }}'  

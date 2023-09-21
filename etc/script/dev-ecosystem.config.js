@@ -1,0 +1,35 @@
+module.exports = {
+    apps: [
+        {
+            name: 'hop-staging',
+            script: 'yarn',
+            args: 'start',
+            cwd: "/home/www/hop_dev",
+            instances: 1,
+            autorestart: true,
+            watch: false,
+            max_memory_restart: '1G',
+            env: {
+                NODE_ENV: "production",
+                PORT: 8081,
+                MONGODB_URI: "mongodb://uWeb3Hop321098:puWeb3Hop009213@127.0.0.1:27017/hop_dev?retryWrites=true&authSource=admin",
+                JWT_SECRET: "yLc%3q^t8S@+QzGv$pZJ7&uXe5mV*dH!",
+                NEXT_PUBLIC_STABLE_COIN_ADDRESS: "0x30bbAD31Cdd1e0f51d17feC52b023035C544aC91",
+                ADMIN_KEY: "cAKVj8jErNUi+2ENXVj0rNnN3hnPAv//jRJrmzL8dmI1VSI9FAurCgfKqk0pCkTnOEaIPzSRfqyZc8DTkLvtFoKFss+c0zJfvoG7/c4HSbsL9FvZCtl1M7k1v9wsbQBhLfhCcB0lbQW/x3aAVT0ZIhs07WS8KQJbJb0ejB4vtfw=",
+                NEXT_PUBLIC_WEB3_PROVIDER: "https://goerli.infura.io/v3/d1fccd12300f4b7981d0b8ca66000df8",
+                NEXT_PUBLIC_EXPLORER_URL: "https://goerli.etherscan.io/",
+                NEXT_PUBLIC_NFT_URL: "https://testnets.opensea.io/assets/goerli",
+                NEXT_PUBLIC_WEB_URL: "https://dev.houseofpanda.co",
+                NEXT_PUBLIC_SMARTCONTRACT_ADDRESS: "0x184d7387290ECcA389d9DCB5Cde41B8201b4F877",
+                NEXT_PUBLIC_STAKER_ADDRESS: "0xD3608dC19BA8D7BAcBA167893fD5e9b0993C1830",
+                NEXT_PUBLIC_IPFS_HOST: "https://ipfs.houseofpanda.co",
+                NEXT_PUBLIC_CHAIN_ID: 5,
+                NEXT_PUBLIC_GAS_LIMIT: 500000,
+                REDIS_HOST: "localhost",
+                REDIS_PASSWORD: "",
+                REDIS_PORT: 6379,
+                REDIS_DB: 0,
+            },
+        },
+    ]
+};
